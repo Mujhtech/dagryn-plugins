@@ -1,0 +1,75 @@
+[plugin]
+name = "notify-discord"
+description = "Send notifications to Discord via webhook"
+version = "1.0.0"
+type = "composite"
+author = "dagryn"
+license = "MIT"
+
+[inputs.webhook-url]
+required = true
+description = "Discord webhook URL"
+
+[inputs.message]
+required = true
+description = "Message text to send"
+
+[inputs.username]
+description = "Bot username displayed in Discord"
+default = "Dagryn"
+
+[inputs.avatar-url]
+description = "Bot avatar URL"
+
+[inputs.embed-title]
+description = "Embed title for rich message format"
+
+[inputs.embed-color]
+description = "Embed color as decimal integer (e.g., 3066993 for green)"
+
+[[step]]
+name = "send-notification"
+command = """
+WEBHOOK_URL="${inputs.webhook-url}"
+MESSAGE="${inputs.message}"
+USERNAME="${inputs.username}"
+AVATAR_URL="${inputs.avatar-url}"
+EMBED_TITLE="${inputs.embed-title}"
+EMBED_COLOR="${inputs.embed-color}"
+
+json_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g' -e 's/\r/\\r/g' -e 's/\t/\\t/g'
+}
+
+MESSAGE_ESCAPED=$(json_escape "$MESSAGE")
+USERNAME_ESCAPED=$(json_escape "$USERNAME")
+AVATAR_ESCAPED=$(json_escape "$AVATAR_URL")
+TITLE_ESCAPED=$(json_escape "$EMBED_TITLE")
+
+if [ -n "$EMBED_TITLE" ]; then
+  # Rich embed mode
+  EMBED="{\"title\": \"$TITLE_ESCAPED\", \"description\": \"$MESSAGE_ESCAPED\""
+  if [ -n "$EMBED_COLOR" ]; then
+    EMBED="$EMBED, \"color\": $EMBED_COLOR"
+  fi
+  EMBED="$EMBED}"
+
+  PAYLOAD="{\"username\": \"$USERNAME_ESCAPED\", \"embeds\": [$EMBED]"
+  if [ -n "$AVATAR_URL" ]; then
+    PAYLOAD="$PAYLOAD, \"avatar_url\": \"$AVATAR_ESCAPED\""
+  fi
+  PAYLOAD="$PAYLOAD}"
+else
+  # Simple text mode
+  PAYLOAD="{\"content\": \"$MESSAGE_ESCAPED\", \"username\": \"$USERNAME_ESCAPED\""
+  if [ -n "$AVATAR_URL" ]; then
+    PAYLOAD="$PAYLOAD, \"avatar_url\": \"$AVATAR_ESCAPED\""
+  fi
+  PAYLOAD="$PAYLOAD}"
+fi
+
+echo "Sending Discord notification"
+curl -fsSL -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$WEBHOOK_URL"
+echo ""
+echo "Notification sent"
+"""

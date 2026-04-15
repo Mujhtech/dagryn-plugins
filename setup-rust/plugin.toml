@@ -1,0 +1,90 @@
+[plugin]
+name = "setup-rust"
+description = "Install and configure Rust toolchain"
+version = "1.1.0"
+type = "composite"
+author = "dagryn"
+license = "MIT"
+
+[inputs.rust-version]
+description = "Rust toolchain version to install (stable, nightly, or specific version)"
+default = "stable"
+
+[inputs.cache]
+description = "Cache cargo registry and target directory"
+default = "true"
+
+[[step]]
+name = "install-rustup"
+command = """
+if command -v rustup >/dev/null 2>&1; then
+  echo "rustup already installed"
+else
+  echo "Installing rustup"
+  if command -v curl >/dev/null 2>&1; then
+    INSTALLER_CMD='curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs'
+  elif command -v wget >/dev/null 2>&1; then
+    INSTALLER_CMD='wget -qO- https://sh.rustup.rs'
+  else
+    echo "Error: curl or wget is required to install rustup" >&2
+    exit 1
+  fi
+  if ! sh -c "$INSTALLER_CMD" | sh -s -- -y --default-toolchain none; then
+    echo "Error: rustup installation failed" >&2
+    exit 1
+  fi
+fi
+
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "Error: rustup is not available after installation attempt" >&2
+  exit 1
+fi
+
+if ! rustup --version >/dev/null 2>&1; then
+  RUSTUP_ERR=$(rustup --version 2>&1 || true)
+  echo "Error: rustup is present but cannot execute [binary_not_executable]" >&2
+  if [ -n "$RUSTUP_ERR" ]; then
+    echo "$RUSTUP_ERR" >&2
+  fi
+  exit 1
+fi
+"""
+[step.env]
+PATH = "$HOME/.cargo/bin:$PATH"
+
+[[step]]
+name = "install-toolchain"
+command = """
+TOOLCHAIN="${inputs.rust-version}"
+echo "Installing Rust toolchain: $TOOLCHAIN"
+if ! rustup install "$TOOLCHAIN"; then
+  echo "Error: failed to install Rust toolchain $TOOLCHAIN" >&2
+  exit 1
+fi
+rustup default "$TOOLCHAIN"
+"""
+
+[[step]]
+name = "verify"
+command = """
+echo "Rust: $(rustc --version 2>/dev/null || echo 'unknown')"
+echo "Cargo: $(cargo --version 2>/dev/null || echo 'unknown')"
+"""
+
+[[step]]
+name = "cache-cargo"
+if = "${inputs.cache}"
+command = """
+CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+echo "Cargo registry at $CARGO_HOME/registry eligible for caching"
+if [ -d "target" ]; then
+  echo "Target directory eligible for caching"
+fi
+"""
+
+[[cleanup]]
+name = "shell-cache-reset"
+command = """
+hash -r 2>/dev/null || true
+echo "setup-rust cleanup complete"
+"""
