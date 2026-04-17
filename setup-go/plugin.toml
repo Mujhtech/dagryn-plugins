@@ -1,7 +1,7 @@
 [plugin]
 name = "setup-go"
 description = "Install and configure Go"
-version = "1.4.0"
+version = "1.5.0"
 type = "composite"
 author = "dagryn"
 license = "MIT"
